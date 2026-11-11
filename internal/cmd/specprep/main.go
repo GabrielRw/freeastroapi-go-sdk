@@ -12,6 +12,10 @@
 //     the API rejects.
 //  2. `const` schemas without a `type` get the type of their value, so a field such as
 //     `renderer: {const: "default"}` becomes an optional string enum rather than interface{}.
+//  3. In an `additionalProperties` union of two or more types plus `null`, the `null` member
+//     is dropped. oapi-codegen v2.8 would otherwise declare the map values as pointers but
+//     generate accessors for plain values, which does not compile. The union still decodes
+//     a JSON null (it keeps the raw value).
 //
 // Usage: specprep IN OUT
 package main
@@ -54,11 +58,11 @@ func run(in, out string) error {
 	if err := os.WriteFile(out, append(result, '\n'), 0o644); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "specprep: dropped %d validation-only unions, typed %d const schemas\n", stats.unions, stats.consts)
+	fmt.Fprintf(os.Stderr, "specprep: dropped %d validation-only unions, typed %d const schemas, dropped null from %d map-value unions\n", stats.unions, stats.consts, stats.mapNulls)
 	return nil
 }
 
-type stats struct{ unions, consts int }
+type stats struct{ unions, consts, mapNulls int }
 
 // constraintKeys may appear in a union member that only adds validation.
 var constraintKeys = map[string]bool{
@@ -78,6 +82,16 @@ func prepare(node any, s *stats) {
 			if members, ok := v[key].([]any); ok && validationOnly(members) {
 				delete(v, key)
 				s.unions++
+			}
+		}
+		if extra, ok := v["additionalProperties"].(map[string]any); ok {
+			for _, key := range []string{"anyOf", "oneOf"} {
+				if members, ok := extra[key].([]any); ok {
+					if kept := withoutNull(members); len(kept) >= 2 && len(kept) < len(members) {
+						extra[key] = kept
+						s.mapNulls++
+					}
+				}
 			}
 		}
 		if c, ok := v["const"]; ok {
@@ -104,6 +118,18 @@ func prepare(node any, s *stats) {
 			prepare(child, s)
 		}
 	}
+}
+
+// withoutNull returns members without {"type": "null"}.
+func withoutNull(members []any) []any {
+	kept := make([]any, 0, len(members))
+	for _, m := range members {
+		if obj, ok := m.(map[string]any); ok && len(obj) == 1 && obj["type"] == "null" {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	return kept
 }
 
 func validationOnly(members []any) bool {

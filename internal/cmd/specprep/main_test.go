@@ -23,6 +23,14 @@ func TestPrepare(t *testing.T) {
 	        "shape": {"anyOf": [{"type": "string"}, {"type": "null"}]}
 	      },
 	      "example": {"anyOf": [{"required": ["kept"]}]}
+	    },
+	    "Row": {
+	      "type": "object",
+	      "additionalProperties": {"anyOf": [{"type": "string"}, {"$ref": "#/components/schemas/Cell"}, {"type": "null"}]}
+	    },
+	    "Angles": {
+	      "type": "object",
+	      "additionalProperties": {"anyOf": [{"$ref": "#/components/schemas/Cell"}, {"type": "null"}]}
 	    }
 	  }}
 	}`
@@ -54,7 +62,16 @@ func TestPrepare(t *testing.T) {
 	if !reflect.DeepEqual(props["shape"].(map[string]any)["anyOf"], []any{map[string]any{"type": "string"}, map[string]any{"type": "null"}}) {
 		t.Error("nullable union changed")
 	}
-	if s.unions != 1 || s.consts != 4 {
+	schemas := doc.(map[string]any)["components"].(map[string]any)["schemas"].(map[string]any)
+	row := schemas["Row"].(map[string]any)["additionalProperties"].(map[string]any)["anyOf"].([]any)
+	if len(row) != 2 {
+		t.Errorf("map-value union kept null: %v", row)
+	}
+	angles := schemas["Angles"].(map[string]any)["additionalProperties"].(map[string]any)["anyOf"].([]any)
+	if len(angles) != 2 {
+		t.Errorf("nullable map value changed: %v", angles)
+	}
+	if s.unions != 1 || s.consts != 4 || s.mapNulls != 1 {
 		t.Errorf("stats %+v", s)
 	}
 }

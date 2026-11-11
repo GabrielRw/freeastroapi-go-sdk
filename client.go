@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/GabrielRw/freeastroapi-go-sdk/api"
@@ -47,8 +48,8 @@ func NewClient(opts ...Option) (*Client, error) {
 		baseURL:    DefaultBaseURL,
 		timeout:    DefaultTimeout,
 		maxRetries: DefaultMaxRetries,
-		baseDelay:  250 * time.Millisecond,
-		maxDelay:   5 * time.Second,
+		baseDelay:  DefaultRetryBaseDelay,
+		maxDelay:   DefaultRetryMaxDelay,
 		headers:    http.Header{},
 	}
 	for _, opt := range opts {
@@ -89,6 +90,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		headers:    s.headers,
 		userAgent:  userAgent,
 		sleep:      sleepContext,
+		jitter:     fullJitter,
 	}
 	low, err := api.NewClientWithResponses(c.baseURL, api.WithHTTPClient(c))
 	if err != nil {
@@ -133,7 +135,9 @@ func (c *Client) Do(ctx context.Context, method, path string, query url.Values, 
 	case *[]byte, *Content:
 		accept = "*/*"
 	}
-	req, err := http.NewRequestWithContext(c.core.call(ctx, "", accept, opts), method, target, reader)
+	// Known operations keep their retry policy (see SideEffectingOperations) through Do.
+	opID := operationRoutes()[method+" /"+strings.TrimLeft(path, "/")]
+	req, err := http.NewRequestWithContext(c.core.call(ctx, opID, accept, opts), method, target, reader)
 	if err != nil {
 		return fmt.Errorf("freeastro: %w", err)
 	}
@@ -170,6 +174,16 @@ func (c *Client) Do(ctx context.Context, method, path string, query url.Values, 
 		return nil
 	}
 }
+
+// operationRoutes maps "METHOD /path" to the operation ID, for operations without path
+// parameters.
+var operationRoutes = sync.OnceValue(func() map[string]string {
+	routes := make(map[string]string, len(operations))
+	for _, op := range operations {
+		routes[op.Method+" "+op.Path] = op.OperationID
+	}
+	return routes
+})
 
 // Ptr returns a pointer to v. Optional request fields are pointers:
 //

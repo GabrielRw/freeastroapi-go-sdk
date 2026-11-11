@@ -581,10 +581,17 @@ func bind(ops []*operation, low *lowLevel) error {
 			goName:   name,
 			withJSON: low.methods[name+"WithResponse"],
 			withBody: low.methods[name+"WithBodyWithResponse"],
-			response: low.structs[name+"Response"],
 		}
+		// The response wrapper is usually <Op>Response, but oapi-codegen renames it (for
+		// example SimpleNatalResponse2) when a component schema already has that name, so
+		// read it from the method's return type.
+		respName := resultStruct(lo.withJSON)
+		if respName == "" {
+			respName = resultStruct(lo.withBody)
+		}
+		lo.response = low.structs[respName]
 		if lo.response == nil {
-			errs = append(errs, fmt.Errorf("%s: no %sResponse type", o.id, name))
+			errs = append(errs, fmt.Errorf("%s: no response type for %sWithResponse", o.id, name))
 			continue
 		}
 		if o.rawBody {
@@ -611,6 +618,21 @@ func bind(ops []*operation, low *lowLevel) error {
 		o.low = lo
 	}
 	return errors.Join(errs...)
+}
+
+// resultStruct returns the name of T in a method returning (*T, error), or "".
+func resultStruct(fn *ast.FuncDecl) string {
+	if fn == nil || fn.Type.Results == nil || len(fn.Type.Results.List) == 0 {
+		return ""
+	}
+	star, ok := fn.Type.Results.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return ""
+	}
+	if id, ok := star.X.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------- rendering

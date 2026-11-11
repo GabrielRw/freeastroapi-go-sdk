@@ -23,3 +23,9 @@ output-options:
     number:
       default:
         type: float64
+    # Dates use api.Date (api/doc.go), which decodes null, "" and timestamps without failing,
+    # so a response never fails to decode because of a date.
+    string:
+      formats:
+        date:
+          type: Date

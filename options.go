@@ -49,9 +49,10 @@ func WithMaxRetries(n int) Option {
 	return func(s *settings) { s.maxRetries = n }
 }
 
-// WithRetryDelay sets the exponential backoff: the n-th retry waits base * 2^n, capped at
-// max (defaults 250ms and 5s). A Retry-After header replaces the computed delay, still
-// capped at max.
+// WithRetryDelay sets the exponential backoff: the n-th retry waits a random duration
+// between zero and base * 2^n ("full jitter"), with base * 2^n capped at max (defaults
+// 500ms and 8s). A Retry-After header or retry_after_ms body field on a 429 replaces the
+// computed delay.
 func WithRetryDelay(base, max time.Duration) Option {
 	return func(s *settings) {
 		s.baseDelay = base
@@ -73,17 +74,26 @@ func WithUserAgent(product string) Option {
 // RequestOption configures a single API call.
 type RequestOption func(*callConfig)
 
-// WithIdempotencyKey sends an Idempotency-Key header. It also makes a POST request
-// eligible for automatic retries.
+// WithIdempotencyKey sends an Idempotency-Key header. It also makes the side-effecting
+// operations (SideEffectingOperations) eligible for retries after 408, 5xx, network errors
+// and timeouts.
 func WithIdempotencyKey(key string) RequestOption {
 	return func(c *callConfig) { c.idempotencyKey = key }
 }
 
-// WithRetry forces automatic retries on (true) or off (false) for this call. By default
-// GET, HEAD and OPTIONS requests, and requests with an idempotency key, are retried; other
-// requests are not, because the SDK cannot know that replaying them is safe.
+// WithRetry forces automatic retries on (true) or off (false) for this call. By default every
+// operation is retried after 429, 408, 500, 502, 503, 504, network errors and timeouts,
+// except that the side-effecting operations (SideEffectingOperations) are retried after
+// 408, 5xx, network errors and timeouts only with an idempotency key. WithRetry(true) opts
+// such a call in; WithRetry(false) disables every retry, 429 included.
 func WithRetry(enabled bool) RequestOption {
 	return func(c *callConfig) { c.retry = &enabled }
+}
+
+// WithRequestMaxRetries overrides the client's maximum number of retries for this call.
+// Zero disables retries.
+func WithRequestMaxRetries(n int) RequestOption {
+	return func(c *callConfig) { c.maxRetries = &n }
 }
 
 // WithRequestTimeout overrides the client's per-attempt timeout for this call.

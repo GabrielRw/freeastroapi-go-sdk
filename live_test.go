@@ -7,7 +7,6 @@ package freeastro
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -64,9 +63,8 @@ func TestLive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var fields map[string]any
-		if err := json.Unmarshal(chart, &fields); err != nil || len(fields) == 0 {
-			t.Fatalf("unexpected result %s (%v)", chart, err)
+		if chart.Planets == nil || len(*chart.Planets) == 0 {
+			t.Fatalf("no planets in %+v", chart)
 		}
 	})
 	t.Run("vedic panchang", func(t *testing.T) {

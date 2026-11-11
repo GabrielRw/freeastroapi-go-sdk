@@ -4,7 +4,6 @@ package freeastro
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/GabrielRw/freeastroapi-go-sdk/api"
 )
@@ -80,14 +79,12 @@ func newAIService(c *core) *AIService {
 // Generate Atomic Report.
 //
 // Generates a full astrological report using the Atomic Interpretation System.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *AIService) Generate(ctx context.Context, body api.AtomicReportRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *AIService) Generate(ctx context.Context, body api.AtomicReportRequest, opts ...RequestOption) (*api.AtomicReportResponse, error) {
 	resp, err := s.core.api.V1AiGenerateWithResponse(s.core.call(ctx, "v1_ai_generate", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // ChineseService calls the /chinese operations. Use it through Client.Chinese.
@@ -113,14 +110,12 @@ func newChineseService(c *core) *ChineseService {
 //
 // Timezone handling:
 // - Uses "AUTO" by default to resolve valid LMT (Local Mean Time) for historical dates.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) Bazi(ctx context.Context, body api.BaziRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) Bazi(ctx context.Context, body api.BaziRequest, opts ...RequestOption) (*api.BaziChartResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziWithResponse(s.core.call(ctx, "v1_chinese_bazi", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziDictionary calls GET /api/v1/chinese/bazi/dictionary (operation v1_chinese_bazi_dictionary).
@@ -129,14 +124,12 @@ func (s *ChineseService) Bazi(ctx context.Context, body api.BaziRequest, opts ..
 //
 // Get the full mapping of Integer IDs to Interaction/Star definitions.
 // Clients should cache this response permanently (versioned by server version).
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziDictionary(ctx context.Context, params *api.V1ChineseBaziDictionaryParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziDictionary(ctx context.Context, params *api.V1ChineseBaziDictionaryParams, opts ...RequestOption) (*api.BaziDictionaryResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziDictionaryWithResponse(s.core.call(ctx, "v1_chinese_bazi_dictionary", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziFlow calls POST /api/v1/chinese/bazi/flow (operation v1_chinese_bazi_flow).
@@ -145,14 +138,12 @@ func (s *ChineseService) BaziDictionary(ctx context.Context, params *api.V1Chine
 //
 // Calculate annual and monthly flow pillars for a specific target year.
 // Used for professional timing and predictive analysis.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziFlow(ctx context.Context, body api.BaziFlowRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziFlow(ctx context.Context, body api.BaziFlowRequest, opts ...RequestOption) (*api.BaziFlowResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziFlowWithResponse(s.core.call(ctx, "v1_chinese_bazi_flow", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziHealth calls POST /api/v1/chinese/bazi/health (operation v1_chinese_bazi_health).
@@ -171,14 +162,12 @@ func (s *ChineseService) BaziFlow(ctx context.Context, body api.BaziFlowRequest,
 // - Timing risk analysis (decade and annual peaks)
 //
 // NOTE: This is not medical advice. See disclaimer in response.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziHealth(ctx context.Context, body api.BaziHealthRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziHealth(ctx context.Context, body api.BaziHealthRequest, opts ...RequestOption) (*api.BaziHealthResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziHealthWithResponse(s.core.call(ctx, "v1_chinese_bazi_health", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziLifespan calls POST /api/v1/chinese/bazi/lifespan (operation v1_chinese_bazi_lifespan).
@@ -187,14 +176,12 @@ func (s *ChineseService) BaziHealth(ctx context.Context, body api.BaziHealthRequ
 //
 // Experimental: Calculate energy trajectory (Jing, Qi, Shen) across 0-120y lifespan.
 // Based on Neijing 7/8 year cycles + DaYun/Annual modifier simulation.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziLifespan(ctx context.Context, body api.BaziLifespanRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziLifespan(ctx context.Context, body api.BaziLifespanRequest, opts ...RequestOption) (*api.BaziLifespanResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziLifespanWithResponse(s.core.call(ctx, "v1_chinese_bazi_lifespan", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziSynastry calls POST /api/v1/chinese/bazi/synastry (operation v1_chinese_bazi_synastry).
@@ -202,14 +189,12 @@ func (s *ChineseService) BaziLifespan(ctx context.Context, body api.BaziLifespan
 // Calculate Bazi Compatibility (Synastry).
 //
 // Compare two charts for compatibility.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziSynastry(ctx context.Context, body api.BaziSynastryRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziSynastry(ctx context.Context, body api.BaziSynastryRequest, opts ...RequestOption) (*api.BaziSynastryResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziSynastryWithResponse(s.core.call(ctx, "v1_chinese_bazi_synastry", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // BaziTimeCorrection calls POST /api/v1/chinese/bazi/time-correction (operation v1_chinese_bazi_time_correction).
@@ -218,14 +203,12 @@ func (s *ChineseService) BaziSynastry(ctx context.Context, body api.BaziSynastry
 //
 // Get detailed breakdown of True Solar Time corrections.
 // Returns Civil, LMT, and True Solar (Relative & Absolute).
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) BaziTimeCorrection(ctx context.Context, body api.BaziTimeCorrectionRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) BaziTimeCorrection(ctx context.Context, body api.BaziTimeCorrectionRequest, opts ...RequestOption) (*api.BaziTimeCorrectionResponse, error) {
 	resp, err := s.core.api.V1ChineseBaziTimeCorrectionWithResponse(s.core.call(ctx, "v1_chinese_bazi_time_correction", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Calendar calls GET /api/v1/chinese/calendar/{date} (operation v1_chinese_calendar_date).
@@ -249,14 +232,12 @@ func (s *ChineseService) Calendar(ctx context.Context, date api.Date, params *ap
 //
 // Get current year, month, day, and hour pillars for the present moment.
 // Useful for "Today's energy" or quick transit checks.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *ChineseService) Today(ctx context.Context, params *api.V1ChineseTodayParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *ChineseService) Today(ctx context.Context, params *api.V1ChineseTodayParams, opts ...RequestOption) (*api.ChineseTodayResponse, error) {
 	resp, err := s.core.api.V1ChineseTodayWithResponse(s.core.call(ctx, "v1_chinese_today", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // EphemerisService calls the /ephemeris operations. Use it through Client.Ephemeris.
@@ -273,27 +254,23 @@ func newEphemerisService(c *core) *EphemerisService {
 // Calculate calls POST /api/v1/ephemeris/calculate (operation v1_ephemeris_calculate).
 //
 // Calculate Ephemeris.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *EphemerisService) Calculate(ctx context.Context, body api.EphemerisRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *EphemerisService) Calculate(ctx context.Context, body api.EphemerisRequest, opts ...RequestOption) (*api.EphemerisResponse, error) {
 	resp, err := s.core.api.V1EphemerisCalculateWithResponse(s.core.call(ctx, "v1_ephemeris_calculate", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Get calls GET /api/v1/ephemeris (operation v1_ephemeris).
 //
 // Get Ephemeris.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *EphemerisService) Get(ctx context.Context, params *api.V1EphemerisParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *EphemerisService) Get(ctx context.Context, params *api.V1EphemerisParams, opts ...RequestOption) (*api.EphemerisResponse, error) {
 	resp, err := s.core.api.V1EphemerisWithResponse(s.core.call(ctx, "v1_ephemeris", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // GeoService calls the /geo operations. Use it through Client.Geo.
@@ -404,27 +381,23 @@ func newHoroscopeDailyService(c *core) *HoroscopeDailyService {
 // Get Bulk Horoscope.
 //
 // Get daily horoscope for ALL signs. Optimized for caching/newsletters.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) Bulk(ctx context.Context, params *api.V1HoroscopeDailyBulkParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) Bulk(ctx context.Context, params *api.V1HoroscopeDailyBulkParams, opts ...RequestOption) (*api.HoroscopeDailyBulkResponse, error) {
 	resp, err := s.core.api.V1HoroscopeDailyBulkWithResponse(s.core.call(ctx, "v1_horoscope_daily_bulk", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Personal calls POST /api/v3/horoscope/daily/personal (operation v3_horoscope_daily_personal).
 //
 // Get Personal Horoscope.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) Personal(ctx context.Context, body api.PersonalHoroscopeRequestV3, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) Personal(ctx context.Context, body api.PersonalHoroscopeRequestV3, opts ...RequestOption) (*api.HoroscopeDailyPersonalV3Response, error) {
 	resp, err := s.core.api.V3HoroscopeDailyPersonalWithResponse(s.core.call(ctx, "v3_horoscope_daily_personal", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // PersonalV1 calls POST /api/v1/horoscope/daily/personal (operation v1_horoscope_daily_personal).
@@ -432,27 +405,23 @@ func (s *HoroscopeDailyService) Personal(ctx context.Context, body api.PersonalH
 // Get Personal Horoscope.
 //
 // Get personalized daily horoscope using natal chart + transits.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) PersonalV1(ctx context.Context, body api.PersonalHoroscopeRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) PersonalV1(ctx context.Context, body api.PersonalHoroscopeRequestV1, opts ...RequestOption) (*api.HoroscopeDailyPersonalResponse, error) {
 	resp, err := s.core.api.V1HoroscopeDailyPersonalWithResponse(s.core.call(ctx, "v1_horoscope_daily_personal", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // PersonalV2 calls POST /api/v2/horoscope/daily/personal (operation v2_horoscope_daily_personal).
 //
 // Get Personal Horoscope.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) PersonalV2(ctx context.Context, body api.PersonalHoroscopeRequestV2, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) PersonalV2(ctx context.Context, body api.PersonalHoroscopeRequestV2, opts ...RequestOption) (*api.HoroscopeDailyPersonalV2Response, error) {
 	resp, err := s.core.api.V2HoroscopeDailyPersonalWithResponse(s.core.call(ctx, "v2_horoscope_daily_personal", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Sign calls GET /api/v3/horoscope/daily/sign (operation v3_horoscope_daily_sign).
@@ -462,14 +431,12 @@ func (s *HoroscopeDailyService) PersonalV2(ctx context.Context, body api.Persona
 // Compatibility endpoint for playground clients that selected the V3 engine
 // while using the generic sign horoscope. V3 is personal-only today, so this
 // returns the V2 sign engine shape under the V3 route instead of 404ing.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) Sign(ctx context.Context, params *api.V3HoroscopeDailySignParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) Sign(ctx context.Context, params *api.V3HoroscopeDailySignParams, opts ...RequestOption) (*api.HoroscopeDailySignV3Response, error) {
 	resp, err := s.core.api.V3HoroscopeDailySignWithResponse(s.core.call(ctx, "v3_horoscope_daily_sign", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // SignV1 calls GET /api/v1/horoscope/daily/sign (operation v1_horoscope_daily_sign).
@@ -477,27 +444,23 @@ func (s *HoroscopeDailyService) Sign(ctx context.Context, params *api.V3Horoscop
 // Get Sign Horoscope.
 //
 // Get generic daily horoscope for a specific sign.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) SignV1(ctx context.Context, params *api.V1HoroscopeDailySignParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) SignV1(ctx context.Context, params *api.V1HoroscopeDailySignParams, opts ...RequestOption) (*api.HoroscopeDailySignResponse, error) {
 	resp, err := s.core.api.V1HoroscopeDailySignWithResponse(s.core.call(ctx, "v1_horoscope_daily_sign", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // SignV2 calls GET /api/v2/horoscope/daily/sign (operation v2_horoscope_daily_sign).
 //
 // Get Sign Horoscope.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeDailyService) SignV2(ctx context.Context, params *api.V2HoroscopeDailySignParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeDailyService) SignV2(ctx context.Context, params *api.V2HoroscopeDailySignParams, opts ...RequestOption) (*api.HoroscopeDailySignV2Response, error) {
 	resp, err := s.core.api.V2HoroscopeDailySignWithResponse(s.core.call(ctx, "v2_horoscope_daily_sign", "application/json", opts), params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // HoroscopeWeeklyService calls the /horoscope/weekly operations. Use it through Client.Horoscope.Weekly.
@@ -514,14 +477,12 @@ func newHoroscopeWeeklyService(c *core) *HoroscopeWeeklyService {
 // Personal calls POST /api/v3/horoscope/weekly/personal (operation v3_horoscope_weekly_personal).
 //
 // Get Weekly Personal Horoscope.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *HoroscopeWeeklyService) Personal(ctx context.Context, body api.WeeklyPersonalHoroscopeRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *HoroscopeWeeklyService) Personal(ctx context.Context, body api.WeeklyPersonalHoroscopeRequest, opts ...RequestOption) (*api.HoroscopeWeeklyPersonalV3Response, error) {
 	resp, err := s.core.api.V3HoroscopeWeeklyPersonalWithResponse(s.core.call(ctx, "v3_horoscope_weekly_personal", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // MoonService calls the /moon operations. Use it through Client.Moon.
@@ -592,14 +553,12 @@ func newNatalService(c *core) *NatalService {
 // Calculate Natal.
 //
 // Calculate natal chart with planetary positions, houses, and aspects.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) Calculate(ctx context.Context, params *api.V1NatalCalculateParams, body api.NatalChartRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *NatalService) Calculate(ctx context.Context, params *api.V1NatalCalculateParams, body api.NatalChartRequest, opts ...RequestOption) (*api.NatalCalculateResponse, error) {
 	resp, err := s.core.api.V1NatalCalculateWithResponse(s.core.call(ctx, "v1_natal_calculate", "application/json", opts), params, body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Chart calls POST /api/v1/natal/chart/ (operation v1_natal_chart).
@@ -608,13 +567,13 @@ func (s *NatalService) Calculate(ctx context.Context, params *api.V1NatalCalcula
 //
 // Render a natal chart using the bundled natal library.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) Chart(ctx context.Context, body api.ExperimentalNatalChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartWithResponse(s.core.call(ctx, "v1_natal_chart", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) Chart(ctx context.Context, body api.ExperimentalNatalChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartWithResponse(s.core.call(ctx, "v1_natal_chart", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartComposite calls POST /api/v1/natal/chart/composite (operation v1_natal_chart_composite).
@@ -624,13 +583,13 @@ func (s *NatalService) Chart(ctx context.Context, body api.ExperimentalNatalChar
 // Midpoint composite single-wheel chart endpoint.
 // Renders a standalone composite chart from two people, reusing the natal SVG renderer.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartComposite(ctx context.Context, body api.ExperimentalCompositeChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartCompositeWithResponse(s.core.call(ctx, "v1_natal_chart_composite", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartComposite(ctx context.Context, body api.ExperimentalCompositeChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartCompositeWithResponse(s.core.call(ctx, "v1_natal_chart_composite", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartProgressions calls POST /api/v1/natal/chart/progressions (operation v1_natal_chart_progressions).
@@ -648,13 +607,13 @@ func (s *NatalService) ChartComposite(ctx context.Context, body api.Experimental
 // Response headers expose the resolved timing: `X-Progression-System`,
 // `X-Progression-Target-Date-UTC`, `X-Progressed-Datetime-UTC`, `X-Progression-Age-Years`.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartProgressions(ctx context.Context, body api.ExperimentalSecondaryProgressionsChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartProgressionsWithResponse(s.core.call(ctx, "v1_natal_chart_progressions", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartProgressions(ctx context.Context, body api.ExperimentalSecondaryProgressionsChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartProgressionsWithResponse(s.core.call(ctx, "v1_natal_chart_progressions", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartSecondaryProgressions calls POST /api/v1/natal/chart/secondary-progressions (operation v1_natal_chart_secondary_progressions).
@@ -672,13 +631,13 @@ func (s *NatalService) ChartProgressions(ctx context.Context, body api.Experimen
 // Response headers expose the resolved timing: `X-Progression-System`,
 // `X-Progression-Target-Date-UTC`, `X-Progressed-Datetime-UTC`, `X-Progression-Age-Years`.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartSecondaryProgressions(ctx context.Context, body api.ExperimentalSecondaryProgressionsChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartSecondaryProgressionsWithResponse(s.core.call(ctx, "v1_natal_chart_secondary_progressions", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartSecondaryProgressions(ctx context.Context, body api.ExperimentalSecondaryProgressionsChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartSecondaryProgressionsWithResponse(s.core.call(ctx, "v1_natal_chart_secondary_progressions", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartSolarReturn calls POST /api/v1/natal/chart/solar-return (operation v1_natal_chart_solar_return).
@@ -687,13 +646,13 @@ func (s *NatalService) ChartSecondaryProgressions(ctx context.Context, body api.
 //
 // Generate a bi-wheel or standalone chart for the exact solar return in a target year.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartSolarReturn(ctx context.Context, body api.ExperimentalSolarReturnChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartSolarReturnWithResponse(s.core.call(ctx, "v1_natal_chart_solar_return", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartSolarReturn(ctx context.Context, body api.ExperimentalSolarReturnChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartSolarReturnWithResponse(s.core.call(ctx, "v1_natal_chart_solar_return", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartSynastry calls POST /api/v1/natal/chart/synastry (operation v1_natal_chart_synastry).
@@ -703,13 +662,13 @@ func (s *NatalService) ChartSolarReturn(ctx context.Context, body api.Experiment
 // Synastry bi-wheel chart endpoint.
 // Renders person A (outer) and person B (inner) with optional B house ring and inter-aspects.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartSynastry(ctx context.Context, body api.ExperimentalSynastryChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartSynastryWithResponse(s.core.call(ctx, "v1_natal_chart_synastry", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartSynastry(ctx context.Context, body api.ExperimentalSynastryChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartSynastryWithResponse(s.core.call(ctx, "v1_natal_chart_synastry", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ChartTransits calls POST /api/v1/natal/chart/transits (operation v1_natal_chart_transits).
@@ -718,39 +677,48 @@ func (s *NatalService) ChartSynastry(ctx context.Context, body api.ExperimentalS
 //
 // Generate a bi-wheel chart with natal planets inside and transits outside.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ChartTransits(ctx context.Context, body api.ExperimentalTransitChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalChartTransitsWithResponse(s.core.call(ctx, "v1_natal_chart_transits", "application/json", opts), body)
+// The response body is returned as Content (image/png, image/svg+xml).
+func (s *NatalService) ChartTransits(ctx context.Context, body api.ExperimentalTransitChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalChartTransitsWithResponse(s.core.call(ctx, "v1_natal_chart_transits", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // Report calls GET /api/v1/natal/report/{job_id} (operation v1_natal_report_job_id).
 //
 // Get Psychological Report.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) Report(ctx context.Context, jobID string, params *api.V1NatalReportJobIDParams, opts ...RequestOption) (json.RawMessage, error) {
+func (s *NatalService) Report(ctx context.Context, jobID string, params *api.V1NatalReportJobIDParams, opts ...RequestOption) (*api.PsychologicalReportJobResponse, error) {
 	resp, err := s.core.api.V1NatalReportJobIDWithResponse(s.core.call(ctx, "v1_natal_report_job_id", "application/json", opts), jobID, params)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
+}
+
+// ReportRaw calls GET /api/v1/natal/report/{job_id} (operation v1_natal_report_job_id).
+//
+// Get Psychological Report.
+//
+// ReportRaw returns the response body as sent, whatever its content type (application/json, application/pdf).
+func (s *NatalService) ReportRaw(ctx context.Context, jobID string, params *api.V1NatalReportJobIDParams, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalReportJobIDWithResponse(s.core.call(ctx, "v1_natal_report_job_id", "application/json, application/pdf", opts), jobID, params)
+	if err != nil {
+		return nil, err
+	}
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // ReportCredits calls GET /api/v1/natal/report-credits (operation v1_natal_report_credits).
 //
 // Get Report Credits For Api Key.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) ReportCredits(ctx context.Context, opts ...RequestOption) (json.RawMessage, error) {
+func (s *NatalService) ReportCredits(ctx context.Context, opts ...RequestOption) (*api.ReportCreditsResponse, error) {
 	resp, err := s.core.api.V1NatalReportCreditsWithResponse(s.core.call(ctx, "v1_natal_report_credits", "application/json", opts))
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Simple calls POST /natal (operation simple_natal).
@@ -759,14 +727,12 @@ func (s *NatalService) ReportCredits(ctx context.Context, opts ...RequestOption)
 //
 // A simplified natal endpoint for developer-facing apps.
 // Returns a compact response with curated planets, houses, and useful summary fields.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *NatalService) Simple(ctx context.Context, body api.SimpleNatalRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *NatalService) Simple(ctx context.Context, body api.SimpleNatalRequest, opts ...RequestOption) (*api.SimpleNatalResponse, error) {
 	resp, err := s.core.api.SimpleNatalWithResponse(s.core.call(ctx, "simple_natal", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // NatalExperimentalService calls the /natal/experimental operations. Use it through Client.Natal.Experimental.
@@ -786,15 +752,15 @@ func newNatalExperimentalService(c *core) *NatalExperimentalService {
 //
 // Generate a bi-wheel or standalone chart for the exact solar return in a target year.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
+// The response body is returned as Content (image/png, image/svg+xml).
 //
 // Deprecated: this operation is deprecated by the API.
-func (s *NatalExperimentalService) SolarReturn(ctx context.Context, body api.ExperimentalSolarReturnChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalExperimentalSolarReturnWithResponse(s.core.call(ctx, "v1_natal_experimental_solar_return", "application/json", opts), body)
+func (s *NatalExperimentalService) SolarReturn(ctx context.Context, body api.ExperimentalSolarReturnChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalExperimentalSolarReturnWithResponse(s.core.call(ctx, "v1_natal_experimental_solar_return", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // Transits calls POST /api/v1/natal/experimental/transits (operation v1_natal_experimental_transits).
@@ -803,15 +769,15 @@ func (s *NatalExperimentalService) SolarReturn(ctx context.Context, body api.Exp
 //
 // Generate a bi-wheel chart with natal planets inside and transits outside.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
+// The response body is returned as Content (image/png, image/svg+xml).
 //
 // Deprecated: this operation is deprecated by the API.
-func (s *NatalExperimentalService) Transits(ctx context.Context, body api.ExperimentalTransitChartRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1NatalExperimentalTransitsWithResponse(s.core.call(ctx, "v1_natal_experimental_transits", "application/json", opts), body)
+func (s *NatalExperimentalService) Transits(ctx context.Context, body api.ExperimentalTransitChartRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1NatalExperimentalTransitsWithResponse(s.core.call(ctx, "v1_natal_experimental_transits", "image/png, image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // NumerologyService calls the /numerology operations. Use it through Client.Numerology.
@@ -896,14 +862,12 @@ func newSpaceService(c *core) *SpaceService {
 // Chart calls POST /api/v1/space/chart (operation v1_space_chart).
 //
 // Space Chart.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *SpaceService) Chart(ctx context.Context, body api.SpaceChartRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *SpaceService) Chart(ctx context.Context, body api.SpaceChartRequest, opts ...RequestOption) (*api.SpaceChartResponse, error) {
 	resp, err := s.core.api.V1SpaceChartWithResponse(s.core.call(ctx, "v1_space_chart", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // ChartSVG calls POST /api/v1/space/chart/svg (operation v1_space_chart_svg).
@@ -912,13 +876,13 @@ func (s *SpaceService) Chart(ctx context.Context, body api.SpaceChartRequest, op
 //
 // The chart wheel, drawn by the natal chart renderer with the same themes and options.
 //
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *SpaceService) ChartSVG(ctx context.Context, body api.SpaceChartSvgRequest, opts ...RequestOption) (json.RawMessage, error) {
-	resp, err := s.core.api.V1SpaceChartSvgWithResponse(s.core.call(ctx, "v1_space_chart_svg", "application/json", opts), body)
+// The response body is returned as Content (image/svg+xml).
+func (s *SpaceService) ChartSVG(ctx context.Context, body api.SpaceChartSvgRequest, opts ...RequestOption) (*Content, error) {
+	resp, err := s.core.api.V1SpaceChartSvgWithResponse(s.core.call(ctx, "v1_space_chart_svg", "image/svg+xml", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return newContent(resp.HTTPResponse, resp.Body), nil
 }
 
 // TransitsService calls the /transits operations. Use it through Client.Transits.
@@ -940,14 +904,12 @@ func newTransitsService(c *core) *TransitsService {
 //
 // By default, returns only major aspects (Conjunction, Opposition, Trine, Square, Sextile).
 // Set include_minor=true to get all 10 aspect types including minor aspects.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *TransitsService) Calculate(ctx context.Context, params *api.V1TransitsCalculateParams, body api.TransitRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *TransitsService) Calculate(ctx context.Context, params *api.V1TransitsCalculateParams, body api.TransitRequest, opts ...RequestOption) (*api.TransitsCalculateResponse, error) {
 	resp, err := s.core.api.V1TransitsCalculateWithResponse(s.core.call(ctx, "v1_transits_calculate", "application/json", opts), params, body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // VedicService calls the /vedic operations. Use it through Client.Vedic.
@@ -983,14 +945,12 @@ func newVedicService(c *core) *VedicService {
 //
 // Run up to 6 single-person Vedic endpoint calls in one HTTP request.
 // Items execute sequentially to keep compute bounded and preserve per-item order.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) Batch(ctx context.Context, body api.VedicBatchRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) Batch(ctx context.Context, body api.VedicBatchRequest, opts ...RequestOption) (*api.VedicBatchResponse, error) {
 	resp, err := s.core.api.V1VedicBatchWithResponse(s.core.call(ctx, "v1_vedic_batch", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Calculate calls POST /api/v2/vedic/calculate (operation v2_vedic_calculate).
@@ -1012,14 +972,12 @@ func (s *VedicService) Calculate(ctx context.Context, body api.CalculateRequest,
 //
 // Full Vedic chart with all optional features.
 // Use feature toggles to customize response.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) CalculateV1(ctx context.Context, body api.VedicChartRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) CalculateV1(ctx context.Context, body api.VedicChartRequest, opts ...RequestOption) (*api.VedicCalculateResponse, error) {
 	resp, err := s.core.api.V1VedicCalculateWithResponse(s.core.call(ctx, "v1_vedic_calculate", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Chart calls POST /api/v2/vedic/chart (operation v2_vedic_chart).
@@ -1041,14 +999,12 @@ func (s *VedicService) Chart(ctx context.Context, body api.ChartRequest, opts ..
 //
 // Get basic Vedic chart: Planets + Houses + Ascendant.
 // Lightweight endpoint for essential data only.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) ChartV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) ChartV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (*api.VedicChartResponse, error) {
 	resp, err := s.core.api.V1VedicChartWithResponse(s.core.call(ctx, "v1_vedic_chart", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Chat calls POST /api/v2/vedic/chat (operation v2_vedic_chat).
@@ -1090,14 +1046,12 @@ func (s *VedicService) Compatibility(ctx context.Context, body api.Compatibility
 //
 // Calculate Ashtakoota (8-point) compatibility.
 // Returns score out of 36.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) CompatibilityV1(ctx context.Context, body api.CompatibilityRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) CompatibilityV1(ctx context.Context, body api.CompatibilityRequest, opts ...RequestOption) (*api.VedicCompatibilityResponse, error) {
 	resp, err := s.core.api.V1VedicCompatibilityWithResponse(s.core.call(ctx, "v1_vedic_compatibility", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Dasha calls POST /api/v2/vedic/dasha (operation v2_vedic_dasha).
@@ -1144,14 +1098,12 @@ func (s *VedicService) DashaInsightsV1(ctx context.Context, body api.DashaReques
 // Get Dasha.
 //
 // Get Vimshottari Dasha timeline only.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) DashaV1(ctx context.Context, body api.DashaRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) DashaV1(ctx context.Context, body api.DashaRequestV1, opts ...RequestOption) (*api.VedicDashaResponse, error) {
 	resp, err := s.core.api.V1VedicDashaWithResponse(s.core.call(ctx, "v1_vedic_dasha", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // KP calls POST /api/v2/vedic/kp (operation v2_vedic_kp).
@@ -1207,14 +1159,12 @@ func (s *VedicService) Match(ctx context.Context, body api.MatchV2Request, opts 
 //
 // Calculate compatibility using birth details directly.
 // Computes Moon Nakshatra/Sign internally to avoid ID lookup errors.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) MatchV1(ctx context.Context, body api.MatchRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) MatchV1(ctx context.Context, body api.MatchRequest, opts ...RequestOption) (*api.VedicMatchResponse, error) {
 	resp, err := s.core.api.V1VedicMatchWithResponse(s.core.call(ctx, "v1_vedic_match", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Panchang calls POST /api/v2/vedic/panchang (operation v2_vedic_panchang).
@@ -1236,14 +1186,12 @@ func (s *VedicService) Panchang(ctx context.Context, body api.PanchangRequestV2,
 // Get Panchang.
 //
 // Get Panchang (daily almanac): Tithi, Nakshatra, Yoga, Karana, Rahu Kalam.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) PanchangV1(ctx context.Context, body api.PanchangRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) PanchangV1(ctx context.Context, body api.PanchangRequestV1, opts ...RequestOption) (*api.VedicPanchangResponse, error) {
 	resp, err := s.core.api.V1VedicPanchangWithResponse(s.core.call(ctx, "v1_vedic_panchang", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // QA calls POST /api/v2/vedic/qa (operation v2_vedic_qa).
@@ -1282,14 +1230,12 @@ func (s *VedicService) Strength(ctx context.Context, body api.BaseChartRequestV2
 // Get Strength.
 //
 // Get planetary strength: Shadbala + Ashtakavarga.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) StrengthV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) StrengthV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (*api.VedicStrengthResponse, error) {
 	resp, err := s.core.api.V1VedicStrengthWithResponse(s.core.call(ctx, "v1_vedic_strength", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Vargas calls POST /api/v2/vedic/vargas (operation v2_vedic_vargas).
@@ -1310,14 +1256,12 @@ func (s *VedicService) Vargas(ctx context.Context, body api.VargasRequest, opts 
 // Get Vargas.
 //
 // Get divisional chart positions (D1, D9, D10, etc).
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) VargasV1(ctx context.Context, body api.VargaRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) VargasV1(ctx context.Context, body api.VargaRequest, opts ...RequestOption) (*api.VedicVargasResponse, error) {
 	resp, err := s.core.api.V1VedicVargasWithResponse(s.core.call(ctx, "v1_vedic_vargas", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Yogas calls POST /api/v2/vedic/yogas (operation v2_vedic_yogas).
@@ -1338,14 +1282,12 @@ func (s *VedicService) Yogas(ctx context.Context, body api.BaseChartRequestV2, o
 // Get Yogas.
 //
 // Get detected Yogas only (Manglik, Kala Sarpa, Raj Yogas, etc).
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *VedicService) YogasV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (json.RawMessage, error) {
+func (s *VedicService) YogasV1(ctx context.Context, body api.BaseChartRequestV1, opts ...RequestOption) (*api.VedicYogasResponse, error) {
 	resp, err := s.core.api.V1VedicYogasWithResponse(s.core.call(ctx, "v1_vedic_yogas", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // VedicGocharService calls the /vedic/gochar operations. Use it through Client.Vedic.Gochar.
@@ -1743,14 +1685,12 @@ func newWesternAstrocartographyService(c *core) *WesternAstrocartographyService 
 // Get Astrocartography City Check.
 //
 // Score a single city across the five primary relocation-oriented focus areas.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *WesternAstrocartographyService) CityCheck(ctx context.Context, body api.AstrocartographyCityCheckRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *WesternAstrocartographyService) CityCheck(ctx context.Context, body api.AstrocartographyCityCheckRequest, opts ...RequestOption) (*api.AstrocartographyCityCheckResponse, error) {
 	resp, err := s.core.api.V1WesternAstrocartographyCityCheckWithResponse(s.core.call(ctx, "v1_western_astrocartography_city_check", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Lines calls POST /api/v1/western/astrocartography/lines (operation v1_western_astrocartography_lines).
@@ -1758,14 +1698,12 @@ func (s *WesternAstrocartographyService) CityCheck(ctx context.Context, body api
 // Get Astrocartography Lines.
 //
 // Compute astrocartography map lines for a natal chart.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *WesternAstrocartographyService) Lines(ctx context.Context, body api.AstrocartographyLinesRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *WesternAstrocartographyService) Lines(ctx context.Context, body api.AstrocartographyLinesRequest, opts ...RequestOption) (*api.AstrocartographyLinesResponse, error) {
 	resp, err := s.core.api.V1WesternAstrocartographyLinesWithResponse(s.core.call(ctx, "v1_western_astrocartography_lines", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Parans calls POST /api/v1/western/astrocartography/parans (operation v1_western_astrocartography_parans).
@@ -1773,14 +1711,12 @@ func (s *WesternAstrocartographyService) Lines(ctx context.Context, body api.Ast
 // Get Astrocartography Parans.
 //
 // Compute classical in-mundo astrocartography parans for a natal chart.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *WesternAstrocartographyService) Parans(ctx context.Context, body api.AstrocartographyParansRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *WesternAstrocartographyService) Parans(ctx context.Context, body api.AstrocartographyParansRequest, opts ...RequestOption) (*api.AstrocartographyParansResponse, error) {
 	resp, err := s.core.api.V1WesternAstrocartographyParansWithResponse(s.core.call(ctx, "v1_western_astrocartography_parans", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Recommendations calls POST /api/v1/western/astrocartography/recommendations (operation v1_western_astrocartography_recommendations).
@@ -1788,14 +1724,12 @@ func (s *WesternAstrocartographyService) Parans(ctx context.Context, body api.As
 // Get Astrocartography Recommendations.
 //
 // Rank candidate cities for a focus-oriented astrocartography search.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *WesternAstrocartographyService) Recommendations(ctx context.Context, body api.AstrocartographyRecommendationsRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *WesternAstrocartographyService) Recommendations(ctx context.Context, body api.AstrocartographyRecommendationsRequest, opts ...RequestOption) (*api.AstrocartographyRecommendationsResponse, error) {
 	resp, err := s.core.api.V1WesternAstrocartographyRecommendationsWithResponse(s.core.call(ctx, "v1_western_astrocartography_recommendations", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // Relocation calls POST /api/v1/western/astrocartography/relocation (operation v1_western_astrocartography_relocation).
@@ -1803,14 +1737,12 @@ func (s *WesternAstrocartographyService) Recommendations(ctx context.Context, bo
 // Get Astrocartography Relocation.
 //
 // Build a full relocated chart for the natal instant at a target city.
-//
-// The API does not document this response's schema yet, so the JSON body is returned as is.
-func (s *WesternAstrocartographyService) Relocation(ctx context.Context, body api.AstrocartographyRelocationRequest, opts ...RequestOption) (json.RawMessage, error) {
+func (s *WesternAstrocartographyService) Relocation(ctx context.Context, body api.AstrocartographyRelocationRequest, opts ...RequestOption) (*api.AstrocartographyRelocationResponse, error) {
 	resp, err := s.core.api.V1WesternAstrocartographyRelocationWithResponse(s.core.call(ctx, "v1_western_astrocartography_relocation", "application/json", opts), body)
 	if err != nil {
 		return nil, err
 	}
-	return rawJSON(resp.HTTPResponse, resp.Body)
+	return decoded(resp.JSON200, resp.HTTPResponse, resp.Body)
 }
 
 // WesternChartSimilarityService calls the /western/chart-similarity operations. Use it through Client.Western.ChartSimilarity.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -67,6 +68,8 @@ func newTestClient(t *testing.T, srv *fakeServer, opts ...Option) (*Client, *[]t
 	}
 	var mu sync.Mutex
 	var sleeps []time.Duration
+	// No jitter: each backoff is its ceiling, so the recorded sleeps are deterministic.
+	client.core.jitter = func(max time.Duration) time.Duration { return max }
 	client.core.sleep = func(ctx context.Context, d time.Duration) error {
 		mu.Lock()
 		sleeps = append(sleeps, d)
@@ -194,20 +197,26 @@ func TestBodyCall(t *testing.T) {
 	}
 }
 
-func TestUntypedResponseIsRawJSON(t *testing.T) {
+func TestNatalCalculateIsTyped(t *testing.T) {
 	srv := newServer(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"planets": []any{map[string]any{"name": "Sun"}}})
+		writeJSON(w, 200, map[string]any{"planets": []any{map[string]any{"name": "Sun", "sign": "Gem"}}})
 	})
 	client, _ := newTestClient(t, srv)
-	raw, err := client.Natal.Calculate(context.Background(), nil, api.NatalChartRequest{Year: 1990, Month: 6, Day: 15})
+	chart, err := client.Natal.Calculate(context.Background(), nil, api.NatalChartRequest{Year: 1990, Month: 6, Day: 15})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var chart struct {
-		Planets []struct{ Name string } `json:"planets"`
+	if chart.Planets == nil || (*chart.Planets)[0].Name != "Sun" || (*chart.Planets)[0].Sign != "Gem" {
+		t.Fatalf("chart %+v", chart)
 	}
-	if err := json.Unmarshal(raw, &chart); err != nil || chart.Planets[0].Name != "Sun" {
-		t.Fatalf("raw %s, err %v", raw, err)
+}
+
+func TestRenamedResponseWrapperIsTyped(t *testing.T) {
+	// The schema SimpleNatalResponse makes oapi-codegen rename the operation's wrapper to
+	// SimpleNatalResponse2; the method must still return the typed schema.
+	m, ok := reflect.TypeOf(&NatalService{}).MethodByName("Simple")
+	if !ok || m.Type.Out(0) != reflect.TypeOf(&api.SimpleNatalResponse{}) {
+		t.Fatalf("Natal.Simple returns %v", m.Type.Out(0))
 	}
 }
 
@@ -260,7 +269,7 @@ func TestBinaryResponses(t *testing.T) {
 	}
 }
 
-func TestRetriesGETWithBackoff(t *testing.T) {
+func TestRetriesWithBackoff(t *testing.T) {
 	srv := newServer(t, func(i int, w http.ResponseWriter, _ *http.Request) {
 		if i < 2 {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "busy"})
@@ -275,33 +284,120 @@ func TestRetriesGETWithBackoff(t *testing.T) {
 	if n := len(srv.calls()); n != 3 {
 		t.Fatalf("%d attempts, want 3", n)
 	}
-	if want := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond}; !equalDurations(*sleeps, want) {
+	// Default policy: 2 retries, 0.5s doubling (jitter disabled in tests).
+	if want := []time.Duration{500 * time.Millisecond, time.Second}; !equalDurations(*sleeps, want) {
 		t.Fatalf("sleeps %v, want %v", *sleeps, want)
 	}
 }
 
-func TestRetryHonoursRetryAfter(t *testing.T) {
-	srv := newServer(t, func(i int, w http.ResponseWriter, _ *http.Request) {
-		if i == 0 {
-			w.Header().Set("Retry-After", "2")
-			writeJSON(w, http.StatusTooManyRequests, map[string]any{"detail": "slow down"})
-			return
+func TestBackoffCapAndJitter(t *testing.T) {
+	c := &core{baseDelay: DefaultRetryBaseDelay, maxDelay: DefaultRetryMaxDelay, jitter: func(max time.Duration) time.Duration { return max }}
+	want := []time.Duration{500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 8 * time.Second}
+	for attempt, w := range want {
+		if got := c.backoff(attempt); got != w {
+			t.Errorf("backoff(%d) = %v, want %v", attempt, got, w)
 		}
-		if i == 1 {
-			w.Header().Set("Retry-After", "120")
-			writeJSON(w, http.StatusTooManyRequests, map[string]any{"detail": "slow down"})
-			return
+	}
+	if got := c.backoff(200); got != 8*time.Second {
+		t.Errorf("backoff(200) = %v, want the cap", got)
+	}
+	for i := 0; i < 1000; i++ {
+		if d := fullJitter(time.Second); d < 0 || d > time.Second {
+			t.Fatalf("fullJitter(1s) = %v", d)
 		}
-		writeJSON(w, 200, map[string]any{"count": 0, "results": []any{}})
+	}
+}
+
+func TestRateLimitRetries(t *testing.T) {
+	ctx := context.Background()
+	sun := api.NatalChartRequest{Year: 2000, Month: 1, Day: 1}
+
+	t.Run("POST honours Retry-After and retry_after_ms", func(t *testing.T) {
+		srv := newServer(t, func(i int, w http.ResponseWriter, _ *http.Request) {
+			switch i {
+			case 0:
+				w.Header().Set("Retry-After", "2")
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "rate_limited", "detail": "slow down"})
+			case 1:
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "rate_limited", "retry_after_ms": 1500})
+			default:
+				writeJSON(w, 200, map[string]any{"sign": "Capricorn"})
+			}
+		})
+		client, sleeps := newTestClient(t, srv)
+		if _, err := client.Western.Signs.Sun(ctx, sun); err != nil {
+			t.Fatal(err)
+		}
+		if want := []time.Duration{2 * time.Second, 1500 * time.Millisecond}; !equalDurations(*sleeps, want) {
+			t.Fatalf("sleeps %v, want %v", *sleeps, want)
+		}
 	})
-	client, sleeps := newTestClient(t, srv, WithRetryDelay(100*time.Millisecond, 10*time.Second))
-	if _, err := client.Geo.Search(context.Background(), &api.V2GeoSearchParams{Q: "x"}); err != nil {
-		t.Fatal(err)
-	}
-	// Retry-After replaces the backoff and is capped by the maximum delay.
-	if want := []time.Duration{2 * time.Second, 10 * time.Second}; !equalDurations(*sleeps, want) {
-		t.Fatalf("sleeps %v, want %v", *sleeps, want)
-	}
+	t.Run("HTTP-date Retry-After and backoff without a hint", func(t *testing.T) {
+		srv := newServer(t, func(i int, w http.ResponseWriter, _ *http.Request) {
+			switch i {
+			case 0:
+				w.Header().Set("Retry-After", time.Now().Add(10*time.Second).UTC().Format(http.TimeFormat))
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{})
+			case 1:
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{})
+			default:
+				writeJSON(w, 200, map[string]any{"count": 0, "results": []any{}})
+			}
+		})
+		client, sleeps := newTestClient(t, srv)
+		if _, err := client.Geo.Search(ctx, &api.V2GeoSearchParams{Q: "x"}); err != nil {
+			t.Fatal(err)
+		}
+		got := *sleeps
+		if len(got) != 2 || got[0] < 8*time.Second || got[0] > 10*time.Second || got[1] != time.Second {
+			t.Fatalf("sleeps %v, want ~10s then the 1s backoff", got)
+		}
+	})
+	t.Run("side-effecting operation without a key", func(t *testing.T) {
+		srv := newServer(t, func(i int, w http.ResponseWriter, _ *http.Request) {
+			if i == 0 {
+				writeJSON(w, http.StatusTooManyRequests, map[string]any{"retry_after_ms": 100})
+				return
+			}
+			writeJSON(w, 200, map[string]any{})
+		})
+		client, _ := newTestClient(t, srv)
+		if _, err := client.Vedic.Chat(ctx, nil, api.VedicChatRequest{}); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(srv.calls()); n != 2 {
+			t.Fatalf("%d attempts, want 2 (429 is always retried)", n)
+		}
+	})
+	t.Run("wait over 30s is not slept", func(t *testing.T) {
+		srv := newServer(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", "120")
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "rate_limited", "detail": "slow down"})
+		})
+		client, sleeps := newTestClient(t, srv)
+		_, err := client.Western.Signs.Sun(ctx, sun)
+		var rateLimited *RateLimitError
+		if !errors.As(err, &rateLimited) || rateLimited.RetryAfter != 120*time.Second {
+			t.Fatalf("err = %#v", err)
+		}
+		if rateLimited.Code != "rate_limited" || rateLimited.Message != "slow down" {
+			t.Fatalf("code %q message %q", rateLimited.Code, rateLimited.Message)
+		}
+		if n := len(srv.calls()); n != 1 || len(*sleeps) != 0 {
+			t.Fatalf("%d attempts, sleeps %v; want 1 attempt and no sleep", n, *sleeps)
+		}
+	})
+	t.Run("retries exhausted", func(t *testing.T) {
+		srv := newServer(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{"retry_after_ms": 50})
+		})
+		client, _ := newTestClient(t, srv)
+		_, err := client.Western.Signs.Sun(ctx, sun)
+		var rateLimited *RateLimitError
+		if !errors.As(err, &rateLimited) || rateLimited.RetryAfter != 50*time.Millisecond || len(srv.calls()) != 3 {
+			t.Fatalf("err %#v after %d attempts", err, len(srv.calls()))
+		}
+	})
 }
 
 func TestRetriesExhausted(t *testing.T) {
@@ -320,9 +416,9 @@ func TestRetriesExhausted(t *testing.T) {
 	}
 }
 
-func TestPOSTRetryPolicy(t *testing.T) {
+func TestTransientRetryPolicy(t *testing.T) {
 	ctx := context.Background()
-	body := api.NatalChartRequest{Year: 2000, Month: 1, Day: 1}
+	sun := api.NatalChartRequest{Year: 2000, Month: 1, Day: 1}
 	failTwice := func(i int, w http.ResponseWriter, _ *http.Request) {
 		if i%3 < 2 {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{})
@@ -330,50 +426,94 @@ func TestPOSTRetryPolicy(t *testing.T) {
 		}
 		writeJSON(w, 200, map[string]any{"sign": "Capricorn"})
 	}
+	vedicChat := func(client *Client, opts ...RequestOption) error {
+		_, err := client.Vedic.Chat(ctx, nil, api.VedicChatRequest{}, opts...)
+		return err
+	}
 
-	t.Run("not retried by default", func(t *testing.T) {
+	cases := []struct {
+		name     string
+		call     func(*Client) error
+		attempts int
+	}{
+		{"calculation POST is retried", func(c *Client) error { _, err := c.Western.Signs.Sun(ctx, sun); return err }, 3},
+		{"GET is retried", func(c *Client) error { _, err := c.Geo.Search(ctx, &api.V2GeoSearchParams{Q: "x"}); return err }, 3},
+		{"side-effecting operation is not retried", func(c *Client) error { return vedicChat(c) }, 1},
+		{"side-effecting operation with a key", func(c *Client) error { return vedicChat(c, WithIdempotencyKey("key-1")) }, 3},
+		{"side-effecting operation opted in", func(c *Client) error { return vedicChat(c, WithRetry(true)) }, 3},
+		{"natal calculate is side-effecting", func(c *Client) error {
+			_, err := c.Natal.Calculate(ctx, nil, api.NatalChartRequest{Year: 2000, Month: 1, Day: 1})
+			return err
+		}, 1},
+		{"opt-out", func(c *Client) error { _, err := c.Western.Signs.Sun(ctx, sun, WithRetry(false)); return err }, 1},
+		{"per-request max retries", func(c *Client) error {
+			_, err := c.Western.Signs.Sun(ctx, sun, WithRequestMaxRetries(1))
+			return err
+		}, 2},
+		{"Do keeps the policy of a known operation", func(c *Client) error {
+			return c.Do(ctx, "POST", "/api/v2/vedic/chat", nil, map[string]any{}, nil)
+		}, 1},
+		{"Do retries other paths", func(c *Client) error {
+			return c.Do(ctx, "POST", "/api/v1/example", nil, map[string]any{}, nil)
+		}, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newServer(t, failTwice)
+			client, _ := newTestClient(t, srv)
+			err := tc.call(client)
+			if got := len(srv.calls()); got != tc.attempts {
+				t.Fatalf("%d attempts, want %d (err %v)", got, tc.attempts, err)
+			}
+			if tc.attempts == 3 && err != nil {
+				t.Fatal(err)
+			}
+			var serverErr *ServerError
+			if tc.attempts < 3 && !errors.As(err, &serverErr) {
+				t.Fatalf("err = %#v, want *ServerError", err)
+			}
+		})
+	}
+
+	t.Run("retried requests keep key and body", func(t *testing.T) {
 		srv := newServer(t, failTwice)
 		client, _ := newTestClient(t, srv)
-		_, err := client.Western.Signs.Sun(ctx, body)
-		var serverErr *ServerError
-		if !errors.As(err, &serverErr) || len(srv.calls()) != 1 {
-			t.Fatalf("err %v after %d attempts", err, len(srv.calls()))
-		}
-	})
-	t.Run("idempotency key", func(t *testing.T) {
-		srv := newServer(t, failTwice)
-		client, _ := newTestClient(t, srv)
-		if _, err := client.Western.Signs.Sun(ctx, body, WithIdempotencyKey("key-1")); err != nil {
+		if _, err := client.Western.Signs.Sun(ctx, sun, WithIdempotencyKey("key-1")); err != nil {
 			t.Fatal(err)
 		}
-		calls := srv.calls()
-		if len(calls) != 3 {
-			t.Fatalf("%d attempts, want 3", len(calls))
-		}
-		for _, c := range calls {
+		for _, c := range srv.calls() {
 			if c.header.Get("Idempotency-Key") != "key-1" || !strings.Contains(string(c.body), `"year":2000`) {
 				t.Fatalf("retried request lost its key or body: %v %s", c.header, c.body)
 			}
 		}
 	})
-	t.Run("explicit opt-in", func(t *testing.T) {
-		srv := newServer(t, failTwice)
-		client, _ := newTestClient(t, srv)
-		if _, err := client.Western.Signs.Sun(ctx, body, WithRetry(true)); err != nil {
-			t.Fatal(err)
-		}
-		if len(srv.calls()) != 3 {
-			t.Fatalf("%d attempts, want 3", len(srv.calls()))
+	t.Run("other 4xx are never retried", func(t *testing.T) {
+		for _, status := range []int{400, 401, 403, 404, 409, 422} {
+			srv := newServer(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, status, map[string]any{"detail": "no"})
+			})
+			client, _ := newTestClient(t, srv)
+			if _, err := client.Western.Signs.Sun(ctx, sun, WithRetry(true)); err == nil {
+				t.Fatalf("%d: expected an error", status)
+			}
+			if n := len(srv.calls()); n != 1 {
+				t.Fatalf("%d: %d attempts, want 1", status, n)
+			}
 		}
 	})
-	t.Run("explicit opt-out on GET", func(t *testing.T) {
-		srv := newServer(t, failTwice)
-		client, _ := newTestClient(t, srv)
-		if _, err := client.Geo.Search(ctx, &api.V2GeoSearchParams{Q: "x"}, WithRetry(false)); err == nil {
-			t.Fatal("expected error")
+	t.Run("side-effecting operations exist", func(t *testing.T) {
+		known := map[string]bool{}
+		for _, op := range Operations() {
+			known[op.OperationID] = true
 		}
-		if len(srv.calls()) != 1 {
-			t.Fatalf("%d attempts, want 1", len(srv.calls()))
+		ids := SideEffectingOperations()
+		if len(ids) != 7 {
+			t.Fatalf("SideEffectingOperations() = %v", ids)
+		}
+		for _, id := range ids {
+			if !known[id] || !IsSideEffecting(id) {
+				t.Errorf("%s is not an operation of the spec", id)
+			}
 		}
 	})
 }
@@ -440,6 +580,34 @@ func TestErrorDetails(t *testing.T) {
 	}
 }
 
+func TestErrorResponseShapes(t *testing.T) {
+	cases := []struct {
+		body          string
+		message, code string
+	}{
+		{`{"error":"quota_exceeded","detail":"Monthly quota reached","docs":"https://x"}`, "Monthly quota reached", "quota_exceeded"},
+		{`{"detail":{"error":"invalid_city","message":"City not found","city":"Atlantis"}}`, "City not found", "invalid_city"},
+		{`{"error":"Something broke"}`, "Something broke", ""},
+	}
+	for _, tc := range cases {
+		srv := newServer(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(400)
+			_, _ = io.WriteString(w, tc.body)
+		})
+		client, _ := newTestClient(t, srv)
+		_, err := client.Western.Signs.Sun(context.Background(), api.NatalChartRequest{})
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.Message != tc.message || apiErr.Code != tc.code {
+			t.Errorf("%s: %#v", tc.body, apiErr)
+			continue
+		}
+		if body := apiErr.ErrorResponse(); body == nil || body.Detail == nil && body.Error == nil {
+			t.Errorf("%s: ErrorResponse() = %+v", tc.body, body)
+		}
+	}
+}
+
 func TestNetworkErrorAndTimeout(t *testing.T) {
 	t.Run("network", func(t *testing.T) {
 		srv := newServer(t, func(int, http.ResponseWriter, *http.Request) {})
@@ -474,6 +642,26 @@ func TestNetworkErrorAndTimeout(t *testing.T) {
 		}
 		if n := len(srv.calls()); n != 2 {
 			t.Fatalf("%d attempts, want 2 (timeouts are retried)", n)
+		}
+	})
+	t.Run("side-effecting operation is not retried after a network error", func(t *testing.T) {
+		srv := newServer(t, func(int, http.ResponseWriter, *http.Request) {})
+		url := srv.URL
+		srv.Close()
+		client, err := NewClient(WithAPIKey("k"), WithBaseURL(url), WithRetryDelay(time.Millisecond, time.Millisecond))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var attempts int
+		client.core.sleep = func(ctx context.Context, d time.Duration) error { attempts++; return nil }
+		_, err = client.AI.Generate(context.Background(), api.AtomicReportRequest{})
+		var netErr *NetworkError
+		if !errors.As(err, &netErr) || attempts != 0 {
+			t.Fatalf("err %#v after %d retries", err, attempts)
+		}
+		_, _ = client.AI.Generate(context.Background(), api.AtomicReportRequest{}, WithIdempotencyKey("k1"))
+		if attempts != 2 {
+			t.Fatalf("%d retries with an idempotency key, want 2", attempts)
 		}
 	})
 	t.Run("caller context", func(t *testing.T) {

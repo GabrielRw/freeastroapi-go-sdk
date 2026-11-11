@@ -15,8 +15,10 @@
 //
 // Every method takes a context.Context first. Errors are typed: see APIError and the types
 // that wrap it (AuthenticationError, ValidationError, RateLimitError, ...), NetworkError and
-// TimeoutError. GET requests, and requests sent WithIdempotencyKey, are retried on 408, 429
-// and 5xx responses and on network errors, with exponential backoff that honours Retry-After.
+// TimeoutError. Calls are retried (twice by default, with jittered exponential backoff) after
+// 429, 408, 500, 502, 503 and 504 responses, network errors and timeouts; a 429 honours
+// Retry-After. The few side-effecting operations (SideEffectingOperations) are retried after
+// a transient failure only when sent WithIdempotencyKey or WithRetry(true).
 package freeastro
 
 // Version is the SDK version, sent in the User-Agent header as freeastroapi-go/<Version>.

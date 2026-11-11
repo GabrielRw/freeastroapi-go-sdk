@@ -59,7 +59,7 @@ generated from the OpenAPI document. Optional fields are pointers: `freeastro.Pt
 ### Natal chart
 
 ```go
-raw, err := client.Natal.Calculate(ctx, nil, api.NatalChartRequest{
+chart, err := client.Natal.Calculate(ctx, nil, api.NatalChartRequest{
 	Year: 1990, Month: 6, Day: 15,
 	Hour: freeastro.Ptr(14), Minute: freeastro.Ptr(30),
 	City: freeastro.Ptr("Paris"),
@@ -67,19 +67,15 @@ raw, err := client.Natal.Calculate(ctx, nil, api.NatalChartRequest{
 if err != nil {
 	log.Fatal(err)
 }
-
-// This response has no schema in the OpenAPI document yet, so it is returned as
-// json.RawMessage. Decode what you need:
-var chart struct {
-	Planets []struct {
-		Name string `json:"name"`
-		Sign string `json:"sign"`
-	} `json:"planets"`
+// chart is *api.NatalCalculateResponse; optional fields are pointers.
+if chart.Planets != nil {
+	for _, p := range *chart.Planets {
+		fmt.Println(p.Name, p.Sign)
+	}
 }
-err = json.Unmarshal(raw, &chart)
 ```
 
-Typed responses are decoded for you, for example the Sun sign:
+Every JSON response is decoded into its type, for example the Sun sign:
 
 ```go
 sun, err := client.Western.Signs.Sun(ctx, api.NatalChartRequest{
@@ -142,8 +138,16 @@ per-request options. Resource groups: `AI`, `Chinese`, `Ephemeris`, `Geo`, `Horo
 `Natal`, `Numerology`, `SkyEvents`, `Space`, `Transits`, `Vedic` and `Western`.
 `freeastro.Operations()` lists every operation with its method.
 
-Return types follow the spec: a typed `*api.T` when the response schema is documented,
-`json.RawMessage` when it is not yet, and `*freeastro.Content` for images, PDF and Markdown.
+Return types follow the spec: every JSON response is a typed `*api.T`, and images, PDF and
+Markdown are `*freeastro.Content`. Operations that can answer with JSON or a file (the natal
+report job) also have a `...Raw` variant returning `*freeastro.Content`.
+
+Response decoding is lenient, because some response schemas were inferred from samples: a
+missing required field or a `null` leaves the Go zero value, unknown fields are ignored (or
+kept in `AdditionalProperties` where the schema allows extra fields), and an enum field holds
+any string the API sends, so an unknown value never makes a call fail. Request types keep
+their required fields.
+
 For newer endpoints use the escape hatch:
 
 ```go
@@ -154,7 +158,8 @@ err := client.Do(ctx, "POST", "/api/v1/example", nil, map[string]any{"a": 1}, &o
 ## Errors
 
 HTTP errors are typed. Each wraps an `*freeastro.APIError` with `StatusCode`, `Message`,
-`Code`, `RequestID`, `Body` and `Header`:
+`Code` (the stable error code such as `rate_limited`), `RequestID`, `Body` and `Header`;
+`apiErr.ErrorResponse()` decodes the body as the documented `*api.ErrorResponse`:
 
 | Type | Status |
 | --- | --- |
@@ -185,21 +190,36 @@ cancelled or expires, the context's error is returned.
 
 ## Retries and timeouts
 
-GET, HEAD and OPTIONS requests are retried on network errors, timeouts and HTTP 408, 429, 500,
-502, 503 and 504, with exponential backoff (250ms, 500ms, ... capped at 5s) that honours
-`Retry-After`. Most FreeAstroAPI calculations are POST requests, which are not retried by default
-because the SDK cannot know replaying them is safe: send an idempotency key, or opt in.
+Every SDK for FreeAstroAPI uses the same retry policy:
+
+- Up to 2 retries (`WithMaxRetries`), with exponential backoff and full jitter: retry *n*
+  waits a random time between 0 and 0.5 s × 2^*n*, capped at 8 s (`WithRetryDelay`).
+- **429** is retried for every operation, since the request was rejected before it ran. The
+  wait comes from the `Retry-After` header (seconds or an HTTP date) or `retry_after_ms` in the
+  body, else the backoff. When the server asks for more than 30 s, the SDK does not wait: it
+  returns the `*RateLimitError` at once, with `RetryAfter` set.
+- **408, 500, 502, 503, 504, network errors and timeouts** are retried for every operation
+  except the side-effecting ones, `freeastro.SideEffectingOperations()`:
+  `v1_natal_calculate` (may create a paid report job), `v1_ai_generate`, `v2_vedic_chat`,
+  `v2_western_chat`, `v2_vedic_qa`, `v1_western_transits_timeline` and
+  `v1_western_transits_insights`. These are retried only when the call has an idempotency key
+  (sent as the `Idempotency-Key` header) or opts in with `WithRetry(true)`.
+- Other 4xx responses are never retried.
 
 ```go
 client, err := freeastro.NewClient(
-	freeastro.WithTimeout(30*time.Second),                    // per attempt, default 20s
-	freeastro.WithMaxRetries(3),                              // default 2, 0 disables
-	freeastro.WithRetryDelay(500*time.Millisecond, 10*time.Second),
+	freeastro.WithTimeout(30*time.Second),                  // per attempt, default 20s
+	freeastro.WithMaxRetries(3),                            // default 2, 0 disables
+	freeastro.WithRetryDelay(time.Second, 10*time.Second),  // default 500ms, 8s
 )
 
-sun, err := client.Western.Signs.Sun(ctx, body, freeastro.WithIdempotencyKey("stable-key"))
-sun, err = client.Western.Signs.Sun(ctx, body, freeastro.WithRetry(true))
+reply, err := client.Vedic.Chat(ctx, nil, body, freeastro.WithIdempotencyKey("stable-key"))
+reply, err = client.Vedic.Chat(ctx, nil, body, freeastro.WithRetry(true))     // opt in
+sun, err := client.Western.Signs.Sun(ctx, req, freeastro.WithRetry(false))   // no retries at all
+sun, err = client.Western.Signs.Sun(ctx, req, freeastro.WithRequestMaxRetries(5))
 ```
+
+`Client.Do` applies the policy of the operation matching its method and path.
 
 Other options: `WithBaseURL`, `WithHTTPClient`, `WithHeader`, `WithUserAgent`, and per request
 `WithRequestTimeout`, `WithRequestHeader` and `WithRawResponse` (to read response headers).
@@ -221,18 +241,20 @@ python3 scripts/with_prism.py -- go test -run TestContract -count=1 .   # Prism 
 
 Generation has three pinned steps:
 
-1. `internal/cmd/specprep` applies two deterministic rewrites to a copy of the spec: it drops
+1. `internal/cmd/specprep` applies three deterministic rewrites to a copy of the spec: it drops
    validation-only unions (`anyOf: [{required: [city]}, {required: [lat, lng]}]`, which would
-   otherwise turn requests into union types) and gives `const` schemas without a `type` the type
-   of their value. No OpenAPI 3.1 to 3.0 downgrade is needed.
+   otherwise turn requests into union types), gives `const` schemas without a `type` the type
+   of their value, and drops `null` from `additionalProperties` unions of several types (which
+   oapi-codegen v2.8 would otherwise generate as code that does not compile). No OpenAPI 3.1 to
+   3.0 downgrade is needed. Format `date` maps to `api.Date`, which decodes leniently.
 2. [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) v2.8.2 (pinned in
    `internal/tools/go.mod`, configured in `internal/codegen/oapi-codegen.yaml`) writes the types
    and a low-level client to `api/api.gen.go`.
 3. `internal/cmd/genresources` writes the resource layer (`resources_gen.go`) and the operation
    table (`operations_gen.go`).
 
-The tests cover the transport (auth, retries, errors), every operation through its method
-(`coverage_test.go`), the generator on synthetic specs with typed and untyped responses,
+The tests cover the transport (auth, retries, errors), lenient decoding of every response type
+(`decode_test.go`), every operation through its method (`coverage_test.go`), the generator on synthetic specs with typed and untyped responses,
 `ErrorResponse` bodies and SVG/PNG/PDF/Markdown content (`scripts/test-fixture.sh`), every
 operation against a Prism mock (`contract_test.go`, when `PRISM_URL` is set) and five read-only
 production calls (`live_test.go`, when `FREEASTRO_TEST_API_KEY` is set).

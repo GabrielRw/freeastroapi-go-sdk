@@ -4,7 +4,6 @@ package freeastro_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -49,7 +48,7 @@ func ExampleNatalService_Calculate() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	raw, err := client.Natal.Calculate(context.Background(), nil, api.NatalChartRequest{
+	chart, err := client.Natal.Calculate(context.Background(), nil, api.NatalChartRequest{
 		Year: 1990, Month: 6, Day: 15,
 		Hour: freeastro.Ptr(14), Minute: freeastro.Ptr(30),
 		City: freeastro.Ptr("Paris"),
@@ -57,18 +56,12 @@ func ExampleNatalService_Calculate() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// The spec does not document this response's schema yet, so it is returned as
-	// json.RawMessage; decode the fields you need.
-	var chart struct {
-		Planets []struct {
-			Name string `json:"name"`
-			Sign string `json:"sign"`
-		} `json:"planets"`
+	// chart is *api.NatalCalculateResponse; optional fields are pointers.
+	if chart.Planets != nil {
+		for _, p := range *chart.Planets {
+			fmt.Println(p.Name, p.Sign)
+		}
 	}
-	if err := json.Unmarshal(raw, &chart); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(len(chart.Planets))
 }
 
 func ExampleVedicService_Panchang() {

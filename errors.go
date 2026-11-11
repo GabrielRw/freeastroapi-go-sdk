@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/GabrielRw/freeastroapi-go-sdk/api"
 )
 
 // APIError is an error response from FreeAstroAPI. Every HTTP error is reported as one of
@@ -54,6 +56,17 @@ func (e *APIError) Error() string {
 // Details decodes the JSON error body into v.
 func (e *APIError) Details(v any) error { return json.Unmarshal(e.Body, v) }
 
+// ErrorResponse decodes the body as the documented error shape (api.ErrorResponse). It
+// returns nil when the body is not a JSON object. For a 422, the validation details of the
+// api.HTTPValidationError shape are in Detail (use Details to decode them directly).
+func (e *APIError) ErrorResponse() *api.ErrorResponse {
+	var out api.ErrorResponse
+	if err := json.Unmarshal(e.Body, &out); err != nil {
+		return nil
+	}
+	return &out
+}
+
 // AuthenticationError is returned for HTTP 401: the API key is missing or invalid.
 type AuthenticationError struct{ APIError }
 
@@ -70,10 +83,12 @@ type ConflictError struct{ APIError }
 // Body holds the validation details.
 type ValidationError struct{ APIError }
 
-// RateLimitError is returned for HTTP 429.
+// RateLimitError is returned for HTTP 429, after any automatic retries. It is returned at
+// once, without retrying, when the server asks for a wait longer than MaxRetryAfter.
 type RateLimitError struct {
 	APIError
-	// RetryAfter is how long the server asked the client to wait, or zero.
+	// RetryAfter is how long the server asked the client to wait (the Retry-After header,
+	// or retry_after_ms in the body), or zero.
 	RetryAfter time.Duration
 }
 
@@ -126,9 +141,16 @@ func errorFromResponse(resp *http.Response, body []byte) error {
 		RequestID:  resp.Header.Get("X-Request-Id"),
 	}
 
+	// Error bodies follow api.ErrorResponse: route errors carry "detail" (a message, or an
+	// object with an "error" code and a "message"); gateway errors carry a top-level "error"
+	// code and usually a "detail" message. 422 can also use api.HTTPValidationError.
 	var payload map[string]any
 	_ = json.Unmarshal(body, &payload)
+	detail, _ := payload["detail"].(map[string]any)
 	base.Message = firstString(payload, "detail", "message", "error", "title")
+	if base.Message == "" && detail != nil {
+		base.Message = firstString(detail, "message", "detail", "msg")
+	}
 	if base.Message == "" {
 		base.Message = strings.TrimSpace(strings.TrimPrefix(resp.Status, strconv.Itoa(resp.StatusCode)))
 	}
@@ -136,6 +158,12 @@ func errorFromResponse(resp *http.Response, body []byte) error {
 		base.Message = http.StatusText(resp.StatusCode)
 	}
 	base.Code = firstString(payload, "code", "error_code")
+	if base.Code == "" && detail != nil {
+		base.Code = firstString(detail, "error", "code", "error_code")
+	}
+	if code, ok := payload["error"].(string); base.Code == "" && ok && strings.TrimSpace(code) != base.Message {
+		base.Code = strings.TrimSpace(code)
+	}
 	if base.RequestID == "" {
 		base.RequestID = firstString(payload, "request_id", "trace_id")
 	}
@@ -152,7 +180,10 @@ func errorFromResponse(resp *http.Response, body []byte) error {
 	case code == http.StatusBadRequest || code == http.StatusUnprocessableEntity:
 		return &ValidationError{base}
 	case code == http.StatusTooManyRequests:
-		wait, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		wait, ok := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		if !ok {
+			wait = retryAfterMillis(payload, detail)
+		}
 		return &RateLimitError{APIError: base, RetryAfter: wait}
 	case code >= 500:
 		return &ServerError{base}
@@ -173,6 +204,16 @@ func firstString(payload map[string]any, keys ...string) string {
 		return firstString(nested, keys...)
 	}
 	return ""
+}
+
+// retryAfterMillis reads retry_after_ms from the error body (top level or inside detail).
+func retryAfterMillis(objects ...map[string]any) time.Duration {
+	for _, obj := range objects {
+		if ms, ok := obj["retry_after_ms"].(float64); ok && ms > 0 {
+			return time.Duration(ms * float64(time.Millisecond))
+		}
+	}
+	return 0
 }
 
 // parseRetryAfter parses a Retry-After header in seconds or as an HTTP date.

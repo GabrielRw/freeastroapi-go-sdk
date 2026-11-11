@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
 	"net/http"
 	"time"
 
@@ -26,6 +25,7 @@ type core struct {
 	headers    http.Header
 	userAgent  string
 	sleep      func(ctx context.Context, d time.Duration) error
+	jitter     func(max time.Duration) time.Duration
 
 	api *api.ClientWithResponses
 }
@@ -35,6 +35,7 @@ type callConfig struct {
 	accept         string
 	idempotencyKey string
 	retry          *bool
+	maxRetries     *int
 	timeout        *time.Duration
 	headers        http.Header
 	rawResponse    **http.Response
@@ -54,15 +55,6 @@ func (c *core) call(ctx context.Context, operationID, accept string, opts []Requ
 		}
 	}
 	return context.WithValue(ctx, callKey{}, cfg)
-}
-
-var retryStatuses = map[int]bool{
-	http.StatusRequestTimeout:      true,
-	http.StatusTooManyRequests:     true,
-	http.StatusInternalServerError: true,
-	http.StatusBadGateway:          true,
-	http.StatusServiceUnavailable:  true,
-	http.StatusGatewayTimeout:      true,
 }
 
 // Do sends req with retries. A 2xx response is returned with its body fully read into memory;
@@ -91,7 +83,7 @@ func (c *core) Do(req *http.Request) (*http.Response, error) {
 	header.Set("X-API-Key", c.apiKey)
 	header.Set("User-Agent", c.userAgent)
 
-	retryable := c.retryable(req, cfg)
+	policy := c.policy(req, cfg)
 	timeout := c.timeout
 	if cfg.timeout != nil {
 		timeout = *cfg.timeout
@@ -105,13 +97,14 @@ func (c *core) Do(req *http.Request) (*http.Response, error) {
 				return nil, &NetworkError{Err: err}
 			}
 		}
+		canRetry := attempt < policy.maxRetries
 		resp, body, err := c.send(attemptReq, timeout)
 		if err != nil {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return nil, ctxErr
 			}
-			if retryable && attempt < c.maxRetries {
-				if err := c.sleep(ctx, c.backoff(attempt, 0)); err != nil {
+			if policy.transient && canRetry {
+				if err := c.sleep(ctx, c.backoff(attempt)); err != nil {
 					return nil, err
 				}
 				continue
@@ -130,14 +123,27 @@ func (c *core) Do(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 
-		if retryable && retryStatuses[resp.StatusCode] && attempt < c.maxRetries {
-			wait, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-			if err := c.sleep(ctx, c.backoff(attempt, wait)); err != nil {
+		apiErr := errorFromResponse(resp, body)
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests && policy.rateLimit && canRetry:
+			wait := apiErr.(*RateLimitError).RetryAfter
+			if wait > MaxRetryAfter {
+				return nil, apiErr // too long to wait: let the caller decide
+			}
+			if wait <= 0 {
+				wait = c.backoff(attempt)
+			}
+			if err := c.sleep(ctx, wait); err != nil {
+				return nil, err
+			}
+			continue
+		case transientStatuses[resp.StatusCode] && policy.transient && canRetry:
+			if err := c.sleep(ctx, c.backoff(attempt)); err != nil {
 				return nil, err
 			}
 			continue
 		}
-		return nil, errorFromResponse(resp, body)
+		return nil, apiErr
 	}
 }
 
@@ -161,36 +167,6 @@ func (c *core) send(req *http.Request, timeout time.Duration) (*http.Response, [
 		return nil, nil, err
 	}
 	return resp, body, nil
-}
-
-func (c *core) retryable(req *http.Request, cfg *callConfig) bool {
-	if c.maxRetries <= 0 {
-		return false
-	}
-	if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
-		return false // the body cannot be replayed
-	}
-	if cfg.retry != nil {
-		return *cfg.retry
-	}
-	switch req.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return true
-	}
-	return req.Header.Get("Idempotency-Key") != ""
-}
-
-// backoff returns the delay before retry number attempt+1: Retry-After when the server sent
-// one, otherwise base * 2^attempt, both capped at maxDelay.
-func (c *core) backoff(attempt int, retryAfter time.Duration) time.Duration {
-	delay := retryAfter
-	if delay <= 0 {
-		delay = time.Duration(float64(c.baseDelay) * math.Pow(2, float64(attempt)))
-	}
-	if c.maxDelay > 0 && delay > c.maxDelay {
-		delay = c.maxDelay
-	}
-	return delay
 }
 
 func rewind(req *http.Request) (*http.Request, error) {
