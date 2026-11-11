@@ -1,0 +1,105 @@
+name: Sync spec
+
+# Pulls the production OpenAPI document daily. When it differs from spec/freeastro.json, the
+# SDK is regenerated and fully checked here (pull requests opened with GITHUB_TOKEN do not
+# trigger CI), then a pull request is opened or updated from the spec-sync/auto branch.
+# A failing generator or check fails this workflow instead of opening a broken PR.
+
+on:
+  schedule:
+    - cron: "53 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-spec
+  cancel-in-progress: false
+
+env:
+  SPEC_URL: https://api.freeastroapi.com/openapi.json
+  GO_VERSION: "1.26.11"
+  FREEASTRO_NATIVE: "1"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Fetch the production spec
+        run: |
+          cp spec/freeastro.json "$RUNNER_TEMP/previous-spec.json"
+          python scripts/spec_sync.py fetch "$SPEC_URL" --out spec/freeastro.json
+
+      - name: Diff against the vendored spec
+        id: diff
+        run: |
+          python scripts/spec_sync.py diff "$RUNNER_TEMP/previous-spec.json" spec/freeastro.json \
+            --markdown "$RUNNER_TEMP/spec-diff.md" --github-output "$GITHUB_OUTPUT" > /dev/null
+          cat "$RUNNER_TEMP/spec-diff.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Regenerate
+        if: steps.diff.outputs.changed == 'true'
+        run: scripts/generate.sh
+
+      - name: Check (generated files, vet, tests, synthetic fixtures)
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          scripts/generate.sh --check
+          go vet ./...
+          go test -race -count=1 ./...
+          scripts/test-fixture.sh
+
+      - name: Contract tests
+        if: steps.diff.outputs.changed == 'true'
+        run: python scripts/with_prism.py -- go test -run TestContract -count=1 -v .
+
+      - name: Prism log
+        if: failure() && steps.diff.outputs.changed == 'true'
+        run: tail -n 300 prism.log || true
+
+      - name: Pull request body
+        run: |
+          {
+            cat "$RUNNER_TEMP/spec-diff.md"
+            echo
+            echo "---"
+            echo "Opened by [sync-spec.yml]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) from \`$SPEC_URL\`."
+            echo "Generation, go vet, go test, the synthetic fixtures and the Prism contract tests passed in that run."
+            echo
+            echo "To release after merging: bump \`Version\` in \`freeastro.go\` (before 1.0: minor for"
+            echo "breaking changes and new operations, patch otherwise), update \`CHANGELOG.md\`, then"
+            echo "push a matching \`v*\` tag."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      # With no changes against main this closes a stale spec-sync PR (delete-branch).
+      - name: Open or update the pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: spec-sync/auto
+          delete-branch: true
+          add-paths: |
+            spec/freeastro.json
+            api/api.gen.go
+            resources_gen.go
+            operations_gen.go
+          commit-message: ${{ steps.diff.outputs.title }}
+          title: ${{ steps.diff.outputs.title }}
+          body-path: ${{ runner.temp }}/pr-body.md
+          labels: spec-sync

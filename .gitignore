@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+*.test
+*.out
+coverage.txt
+prism.log
+__pycache__/
+.scratch/

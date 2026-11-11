@@ -1,0 +1,25 @@
+# oapi-codegen configuration for the low-level layer (package api).
+# The oapi-codegen version is pinned in internal/tools/go.mod; run scripts/generate.sh.
+#
+# oapi-codegen v2.8 reads OpenAPI 3.1 natively (type arrays and anyOf-with-null become
+# optional/pointer fields, const enums are supported), so there is no 3.1 -> 3.0 downgrade.
+# scripts/generate.sh first runs internal/cmd/specprep, which drops validation-only unions
+# and types untyped consts (see its package comment).
+package: api
+generate:
+  models: true
+  client: true
+output-options:
+  # Idiomatic Go names (ID, URL, CSS, ...).
+  name-normalizer: ToCamelCaseWithInitialisms
+  # Give inline schemas (union responses, nested objects) names callers can refer to.
+  generate-types-for-anonymous-schemas: true
+  resolve-type-name-collisions: true
+  # Keep every component schema, including ones no operation references yet.
+  skip-prune: true
+  # JSON numbers without a format are float64 (oapi-codegen defaults to float32, which
+  # loses precision on longitudes and Julian days).
+  type-mapping:
+    number:
+      default:
+        type: float64

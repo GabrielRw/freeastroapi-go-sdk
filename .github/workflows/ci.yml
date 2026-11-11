@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Lets maintainers run CI on the bot-opened spec-sync/auto branch (pull requests opened
+  # with GITHUB_TOKEN do not trigger workflows): Actions -> CI -> Run workflow.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Keep in sync with GO_IMAGE in scripts/docker.sh.
+  GO_VERSION: "1.26.11"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum version in go.mod and the pinned toolchain.
+        go-version: ["1.24.13", "1.26.11"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: go.sum
+      - run: go vet ./...
+      # Unit, coverage and generator tests; contract and live tests skip without PRISM_URL / API key.
+      - run: go test -race -count=1 ./...
+
+  generated:
+    # Generated code is current, formatted and tidy; the pipeline handles the synthetic specs.
+    runs-on: ubuntu-latest
+    env:
+      FREEASTRO_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+      - name: Generated files are up to date
+        run: scripts/generate.sh --check
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l $(git ls-files '*.go'))"
+          if [ -n "$unformatted" ]; then echo "Run gofmt on: $unformatted" >&2; exit 1; fi
+      - name: go.mod files are tidy
+        run: |
+          go mod tidy -diff
+          (cd internal/tools && go mod tidy -diff)
+      - name: Synthetic spec fixtures
+        run: scripts/test-fixture.sh
+
+  contract:
+    # Every SDK method against a Stoplight Prism mock of spec/freeastro.json.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Spec tool tests
+        run: python -m unittest discover -s scripts -p "test_*.py"
+      - name: Contract tests
+        run: python scripts/with_prism.py -- go test -run TestContract -count=1 -v .
+      - name: Prism log
+        if: failure()
+        run: tail -n 300 prism.log || true

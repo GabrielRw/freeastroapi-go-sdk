@@ -1,0 +1,77 @@
+name: Release
+
+# Runs when a v* tag is pushed (for example v0.1.0). Go modules need no registry: the tag is
+# the release. This workflow checks that the tag matches Version in freeastro.go, runs the
+# full test suite, creates the GitHub release from the CHANGELOG.md section, and asks
+# proxy.golang.org to fetch the new version so pkg.go.dev picks it up quickly.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.26.11"
+  MODULE: github.com/GabrielRw/freeastroapi-go-sdk
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FREEASTRO_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+
+      - name: Check the tag matches Version
+        run: |
+          version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' freeastro.go)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Version \"$version\" in freeastro.go" >&2
+            exit 1
+          fi
+
+      - run: scripts/generate.sh --check
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: scripts/test-fixture.sh
+
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 == "## " v { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "CHANGELOG.md has no \"## $version\" section" >&2
+            exit 1
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac # v1.2.0-rc.1
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
+
+      - name: Ask proxy.golang.org to fetch the version
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}
+        run: GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "$MODULE@$GITHUB_REF_NAME"
